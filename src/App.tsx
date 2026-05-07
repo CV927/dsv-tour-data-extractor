@@ -224,7 +224,7 @@ export default function App() {
             letterSpacing: "-2px",
           }}
         >
-          Tour Data Extractor
+          DSV Tour Data Extractor
         </h1>
 
         <div
