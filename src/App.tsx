@@ -40,9 +40,7 @@ export default function App() {
 
     const output: string[] = [];
 
-    const tourMatch = cleanText.match(
-      /Tour-Referenz:\s*0*(\d+)/i
-    );
+    const tourMatch = cleanText.match(/Tour-Referenz:\s*0*(\d+)/i);
 
     if (tourMatch) {
       output.push(`Tour: ${tourMatch[1]}`);
@@ -50,7 +48,7 @@ export default function App() {
     }
 
     const stopRegex =
-      /(?:^|\n)\s*(\d+)\s+(Laden|Entladen)\s+([\s\S]*?)(?=(?:\n)\s*\d+\s+(?:Laden|Entladen)\s|$)/gi;
+      /(?:^|\n)\s*(\d+)\s+(Laden|Entladen)\s+([\s\S]*?)(?=(?:\n)\s*\d+\s+(?:Laden|Entladen)\s|(?:\n)\s*Datum:|$)/gi;
 
     let loadNr = 1;
     let unloadNr = 1;
@@ -61,22 +59,20 @@ export default function App() {
       const action = match[2];
       const block = match[3];
 
-      const placeMatch = block.match(
-        /\b(\d{5})\s+([A-ZÄÖÜa-zäöüß\-]+(?:\s+[A-ZÄÖÜa-zäöüß\-]+)?)/i
-      );
+      const placeMatches = [
+        ...block.matchAll(
+          /\b(\d{5})\s+([A-ZÄÖÜa-zäöüß\-]+(?:\s+[A-ZÄÖÜa-zäöüß\-]+)?)/gi
+        ),
+      ];
 
-      if (!placeMatch) continue;
+      if (placeMatches.length === 0) continue;
+
+      const placeMatch = placeMatches[placeMatches.length - 1];
 
       const plz = placeMatch[1];
-
       const city = normalizeCity(placeMatch[2]);
 
-      if (
-        city.toLowerCase().includes("zeitfenster") ||
-        city.includes("----")
-      ) {
-        continue;
-      }
+      if (!city || city.toLowerCase().includes("zeitfenster")) continue;
 
       if (/^Laden$/i.test(action)) {
         output.push(`Загрузка Nr. ${loadNr}: ${plz} ${city}`);
@@ -94,9 +90,7 @@ export default function App() {
 
       if (zeitMatch) {
         output.push(
-          `${formatDate(zeitMatch[1])} ${formatTime(
-            zeitMatch[2]
-          )}`
+          `${formatDate(zeitMatch[1])} ${formatTime(zeitMatch[2])}`
         );
       }
 
@@ -108,19 +102,19 @@ export default function App() {
 
   const processImage = async (file: File) => {
     setStatus("Обработка screenshot...");
+    setResult("");
 
     const {
       data: { text },
     } = await Tesseract.recognize(file, "deu");
 
-    const parsed = extractData(text);
-
-    setResult(parsed);
+    setResult(extractData(text));
     setStatus("Готово");
   };
 
   const processPdf = async (file: File) => {
     setStatus("Обработка PDF...");
+    setResult("");
 
     const arrayBuffer = await file.arrayBuffer();
 
@@ -137,14 +131,12 @@ export default function App() {
 
       const pageText = textContent.items
         .map((item: any) => item.str)
-        .join(" ");
+        .join("\n");
 
       fullText += pageText + "\n";
     }
 
-    const parsed = extractData(fullText);
-
-    setResult(parsed);
+    setResult(extractData(fullText));
     setStatus("PDF обработан");
   };
 
@@ -156,13 +148,15 @@ export default function App() {
 
     if (file.type.startsWith("image")) {
       await processImage(file);
+      return;
     }
+
+    setStatus("Файл не поддерживается");
   };
 
   useEffect(() => {
     const handlePaste = async (event: ClipboardEvent) => {
       const items = event.clipboardData?.items;
-
       if (!items) return;
 
       for (let i = 0; i < items.length; i++) {
@@ -269,16 +263,14 @@ export default function App() {
           >
             <label
               style={{
-                background:
-                  "linear-gradient(180deg,#4c78ff,#3765ea)",
+                background: "linear-gradient(180deg,#4c78ff,#3765ea)",
                 color: "#ffffff",
                 padding: "16px 34px",
                 borderRadius: 999,
                 cursor: "pointer",
                 fontSize: 18,
                 fontWeight: 400,
-                boxShadow:
-                  "0 10px 25px rgba(55,101,234,0.25)",
+                boxShadow: "0 10px 25px rgba(55,101,234,0.25)",
               }}
             >
               Загрузить PDF
@@ -300,8 +292,7 @@ export default function App() {
             <button
               onClick={copyText}
               style={{
-                background:
-                  "linear-gradient(180deg,#4c78ff,#3765ea)",
+                background: "linear-gradient(180deg,#4c78ff,#3765ea)",
                 color: "#ffffff",
                 padding: "16px 34px",
                 borderRadius: 999,
@@ -309,8 +300,7 @@ export default function App() {
                 border: "none",
                 fontSize: 18,
                 fontWeight: 400,
-                boxShadow:
-                  "0 10px 25px rgba(55,101,234,0.25)",
+                boxShadow: "0 10px 25px rgba(55,101,234,0.25)",
               }}
             >
               Скопировать текст
