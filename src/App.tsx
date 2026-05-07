@@ -143,7 +143,7 @@ export default function App() {
       const block = match[3];
 
       const placeMatch = block.match(
-        /\b(\d{5})\s+([A-ZÄÖÜ]+)/i
+        /\b(\d{5})\s+([A-ZÄÖÜa-zäöüß\-]+(?:\s+[A-ZÄÖÜa-zäöüß\-]+)?)/i
       );
 
       if (!placeMatch) continue;
