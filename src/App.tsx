@@ -35,102 +35,22 @@ export default function App() {
       .toLowerCase()
       .replace(/\b\w/g, (c) => c.toUpperCase());
 
-  // SCREENSHOT OCR
-  const extractFromImage = (text: string) => {
-    const cleanText = text.replace(/\r/g, "");
-
-    const lines = cleanText
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
-
-    const tourMatch = cleanText.match(/Tour-Referenz:\s*0*(\d+)/i);
-
-    const tour = tourMatch ? tourMatch[1] : "";
+  const extractData = (text: string) => {
+    const cleanText = text.replace(/\r/g, "\n");
 
     const output: string[] = [];
-
-    if (tour) {
-      output.push(`Tour: ${tour}`);
-      output.push("");
-    }
-
-    let loadNr = 1;
-    let unloadNr = 1;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
-      const isLoad =
-        /\bLaden\b/i.test(line) &&
-        !/\bEntladen\b/i.test(line);
-
-      const isUnload =
-        /\bEntladen\b/i.test(line);
-
-      if (!isLoad && !isUnload) continue;
-
-      const placeBlock = lines.slice(i, i + 5).join(" ");
-
-      const timeBlock = lines.slice(i, i + 7).join(" ");
-
-      const placeMatch = placeBlock.match(
-        /\b(\d{5})\s+([A-ZÄÖÜa-zäöüß\-]+(?:\s+[A-ZÄÖÜa-zäöüß\-]+)?)/i
-      );
-
-      if (!placeMatch) continue;
-
-      const plz = placeMatch[1];
-
-      const city = normalizeCity(placeMatch[2]);
-
-      if (isLoad) {
-        output.push(`Загрузка Nr. ${loadNr}: ${plz} ${city}`);
-        loadNr++;
-      }
-
-      if (isUnload) {
-        output.push(`Выгрузка Nr. ${unloadNr}: ${plz} ${city}`);
-        unloadNr++;
-      }
-
-      const zeitMatch = timeBlock.match(
-        /Zeitfenster:\s*(\d{1,2}\.\d{1,2}\.\d{4})\s+(\d{1,2}:\d{2})/i
-      );
-
-      if (zeitMatch) {
-        output.push(
-          `${formatDate(zeitMatch[1])} ${formatTime(
-            zeitMatch[2]
-          )}`
-        );
-      }
-
-      output.push("");
-    }
-
-    return output.join("\n").trim();
-  };
-
-  // PDF PARSER
-  const extractFromPdf = (text: string) => {
-    const cleanText = text.replace(/\r/g, "\n");
 
     const tourMatch = cleanText.match(
       /Tour-Referenz:\s*0*(\d+)/i
     );
 
-    const tour = tourMatch ? tourMatch[1] : "";
-
-    const output: string[] = [];
-
-    if (tour) {
-      output.push(`Tour: ${tour}`);
+    if (tourMatch) {
+      output.push(`Tour: ${tourMatch[1]}`);
       output.push("");
     }
 
     const stopRegex =
-      /(?:^|\n)\s*(\d+)\s+(Laden|Entladen)\s+([\s\S]*?)(?=(?:\n)\s*\d+\s+(?:Laden|Entladen)\s|(?:\n)\s*Datum:|$)/gi;
+      /(?:^|\n)\s*(\d+)\s+(Laden|Entladen)\s+([\s\S]*?)(?=(?:\n)\s*\d+\s+(?:Laden|Entladen)\s|$)/gi;
 
     let loadNr = 1;
     let unloadNr = 1;
@@ -139,7 +59,6 @@ export default function App() {
 
     while ((match = stopRegex.exec(cleanText)) !== null) {
       const action = match[2];
-
       const block = match[3];
 
       const placeMatch = block.match(
@@ -150,10 +69,14 @@ export default function App() {
 
       const plz = placeMatch[1];
 
-      const city =
-        placeMatch[2]
-          .toLowerCase()
-          .replace(/\b\w/g, (c) => c.toUpperCase()) || "";
+      const city = normalizeCity(placeMatch[2]);
+
+      if (
+        city.toLowerCase().includes("zeitfenster") ||
+        city.includes("----")
+      ) {
+        continue;
+      }
 
       if (/^Laden$/i.test(action)) {
         output.push(`Загрузка Nr. ${loadNr}: ${plz} ${city}`);
@@ -183,58 +106,57 @@ export default function App() {
     return output.join("\n").trim();
   };
 
-  const readPdf = async (file: File) => {
-    setStatus("Обработка PDF...");
-    setResult("");
-
-    const buffer = await file.arrayBuffer();
-
-    const pdf = await pdfjsLib.getDocument({
-      data: new Uint8Array(buffer),
-    }).promise;
-
-    let fullText = "";
-
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-      const page = await pdf.getPage(pageNum);
-
-      const textContent = await page.getTextContent();
-
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join("\n");
-
-      fullText += pageText + "\n";
-    }
-
-    setResult(extractFromPdf(fullText));
-    setStatus("PDF обработан");
-  };
-
-  const readImage = async (file: File) => {
+  const processImage = async (file: File) => {
     setStatus("Обработка screenshot...");
-    setResult("");
 
     const {
       data: { text },
     } = await Tesseract.recognize(file, "deu");
 
-    setResult(extractFromImage(text));
+    const parsed = extractData(text);
+
+    setResult(parsed);
     setStatus("Готово");
+  };
+
+  const processPdf = async (file: File) => {
+    setStatus("Обработка PDF...");
+
+    const arrayBuffer = await file.arrayBuffer();
+
+    const pdf = await pdfjsLib.getDocument({
+      data: arrayBuffer,
+    }).promise;
+
+    let fullText = "";
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+
+      const textContent = await page.getTextContent();
+
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(" ");
+
+      fullText += pageText + "\n";
+    }
+
+    const parsed = extractData(fullText);
+
+    setResult(parsed);
+    setStatus("PDF обработан");
   };
 
   const handleFile = async (file: File) => {
     if (file.type === "application/pdf") {
-      await readPdf(file);
+      await processPdf(file);
       return;
     }
 
     if (file.type.startsWith("image")) {
-      await readImage(file);
-      return;
+      await processImage(file);
     }
-
-    setStatus("Файл не поддерживается");
   };
 
   useEffect(() => {
@@ -253,14 +175,8 @@ export default function App() {
       }
     };
 
-    const preventDefault = (event: DragEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-    };
-
     const handleDrop = async (event: DragEvent) => {
       event.preventDefault();
-      event.stopPropagation();
 
       const file = event.dataTransfer?.files?.[0];
 
@@ -269,18 +185,22 @@ export default function App() {
       }
     };
 
+    const preventDefaults = (event: DragEvent) => {
+      event.preventDefault();
+    };
+
     window.addEventListener("paste", handlePaste);
-    window.addEventListener("dragover", preventDefault);
     window.addEventListener("drop", handleDrop);
+    window.addEventListener("dragover", preventDefaults);
 
     return () => {
       window.removeEventListener("paste", handlePaste);
-      window.removeEventListener("dragover", preventDefault);
       window.removeEventListener("drop", handleDrop);
+      window.removeEventListener("dragover", preventDefaults);
     };
   }, []);
 
-  const copyResult = async () => {
+  const copyText = async () => {
     await navigator.clipboard.writeText(result);
     setStatus("Скопировано");
   };
@@ -289,55 +209,50 @@ export default function App() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#f5f5f7",
+        background: "#f3f3f5",
         padding: 30,
-        boxSizing: "border-box",
-        fontFamily: '"Aptos", "Segoe UI", sans-serif',
+        fontFamily: '"Aptos","Segoe UI",sans-serif',
       }}
     >
       <div
         style={{
-          width: "100%",
-          maxWidth: 1100,
+          maxWidth: 1200,
           margin: "0 auto",
         }}
       >
         <h1
           style={{
             textAlign: "center",
-            fontSize: "clamp(48px, 6vw, 78px)",
+            fontSize: "72px",
             fontWeight: 200,
+            marginBottom: 30,
             color: "#1d1d1f",
-            marginBottom: 34,
             letterSpacing: "-2px",
           }}
         >
-          DSV Tour Data Extractor
+          Tour Data Extractor
         </h1>
 
         <div
           style={{
             background: "#ffffff",
             borderRadius: 36,
-            border: "1px solid #e8e8e8",
-            padding: 34,
-            boxShadow: "0 20px 60px rgba(0,0,0,0.08)",
+            padding: 36,
+            border: "1px solid #e3e3e3",
           }}
         >
           <div
             style={{
-              border: "2px dashed #d8d8d8",
-              borderRadius: 28,
               minHeight: 180,
+              borderRadius: 28,
+              border: "2px dashed #d9d9d9",
+              background: "#f3f3f5",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              textAlign: "center",
-              padding: 20,
-              fontSize: "clamp(18px, 3vw, 26px)",
-              color: "#8c8c8c",
+              fontSize: 24,
+              color: "#8d8d8d",
               fontWeight: 300,
-              background: "#f5f5f7",
             }}
           >
             {status}
@@ -347,23 +262,23 @@ export default function App() {
             style={{
               display: "flex",
               justifyContent: "center",
-              gap: 14,
-              flexWrap: "wrap",
+              gap: 18,
               marginTop: 34,
+              flexWrap: "wrap",
             }}
           >
             <label
               style={{
                 background:
-                  "linear-gradient(180deg,#3f82ff,#2563eb)",
+                  "linear-gradient(180deg,#4c78ff,#3765ea)",
                 color: "#ffffff",
-                borderRadius: 999,
                 padding: "16px 34px",
-                fontSize: 16,
-                fontWeight: 400,
+                borderRadius: 999,
                 cursor: "pointer",
+                fontSize: 18,
+                fontWeight: 400,
                 boxShadow:
-                  "0 10px 25px rgba(37,99,235,0.25)",
+                  "0 10px 25px rgba(55,101,234,0.25)",
               }}
             >
               Загрузить PDF
@@ -371,6 +286,7 @@ export default function App() {
               <input
                 type="file"
                 accept=".pdf,image/*"
+                style={{ display: "none" }}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
 
@@ -378,53 +294,46 @@ export default function App() {
                     handleFile(file);
                   }
                 }}
-                style={{ display: "none" }}
               />
             </label>
 
-            {result && (
-              <button
-                onClick={copyResult}
-                style={{
-                  background:
-                    "linear-gradient(180deg,#3f82ff,#2563eb)",
-                  color: "#ffffff",
-                  border: "none",
-                  borderRadius: 999,
-                  padding: "16px 34px",
-                  fontSize: 16,
-                  fontWeight: 400,
-                  cursor: "pointer",
-                  boxShadow:
-                    "0 10px 25px rgba(37,99,235,0.25)",
-                }}
-              >
-                Скопировать текст
-              </button>
-            )}
+            <button
+              onClick={copyText}
+              style={{
+                background:
+                  "linear-gradient(180deg,#4c78ff,#3765ea)",
+                color: "#ffffff",
+                padding: "16px 34px",
+                borderRadius: 999,
+                cursor: "pointer",
+                border: "none",
+                fontSize: 18,
+                fontWeight: 400,
+                boxShadow:
+                  "0 10px 25px rgba(55,101,234,0.25)",
+              }}
+            >
+              Скопировать текст
+            </button>
           </div>
 
           <div
             style={{
-              marginTop: 34,
-              background: "#f5f5f7",
-              borderRadius: 30,
-              padding: 34,
-              border: "1px solid #e1e1e1",
+              marginTop: 36,
+              background: "#f3f3f5",
+              borderRadius: 28,
+              padding: 40,
+              border: "1px solid #dddddd",
             }}
           >
             <pre
               style={{
                 margin: 0,
                 whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
                 color: "#1d1d1f",
-                fontSize: "clamp(16px, 2vw, 19px)",
-                lineHeight: 1.9,
-                textAlign: "left",
-                fontWeight: 400,
-                fontFamily:
-                  '"Aptos", "Segoe UI", sans-serif',
+                fontSize: 18,
+                lineHeight: 2,
+                fontFamily: '"Aptos","Segoe UI",sans-serif',
               }}
             >
               {result || "Здесь появится готовый текст..."}
