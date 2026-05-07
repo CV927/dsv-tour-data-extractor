@@ -43,7 +43,7 @@ export default function App() {
     const tourMatch = cleanText.match(/Tour-Referenz:\s*0*(\d+)/i);
 
     if (tourMatch) {
-      output.push(`Tour: ${tourMatch[1]}`);
+      output.push(`📄 Tour: ${tourMatch[1]}`);
       output.push("");
     }
 
@@ -75,22 +75,26 @@ export default function App() {
       if (!city || city.toLowerCase().includes("zeitfenster")) continue;
 
       if (/^Laden$/i.test(action)) {
-        output.push(`Загрузка Nr. ${loadNr}: ${plz} ${city}`);
+        output.push(`📦 Загрузка Nr. ${loadNr}: ${plz} ${city}`);
         loadNr++;
       }
 
       if (/^Entladen$/i.test(action)) {
-        output.push(`Выгрузка Nr. ${unloadNr}: ${plz} ${city}`);
+        output.push(`📍 Выгрузка Nr. ${unloadNr}: ${plz} ${city}`);
         unloadNr++;
       }
 
       const zeitMatch = block.match(
-        /Zeitfenster:\s*(\d{1,2}\.\d{1,2}\.\d{4})\s+(\d{1,2}:\d{2})/i
+        /Zeitfenster:\s*(\d{1,2}\.\d{1,2}\.\d{4})\s+(\d{1,2}:\d{2})(?:\s*bis\s*(\d{1,2}:\d{2}))?/i
       );
 
       if (zeitMatch) {
+        const date = formatDate(zeitMatch[1]);
+        const fromTime = formatTime(zeitMatch[2]);
+        const toTime = zeitMatch[3] ? formatTime(zeitMatch[3]) : null;
+
         output.push(
-          `${formatDate(zeitMatch[1])} ${formatTime(zeitMatch[2])}`
+          toTime ? `${date} ${fromTime} - ${toTime}` : `${date} ${fromTime}`
         );
       }
 
@@ -126,7 +130,6 @@ export default function App() {
 
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
-
       const textContent = await page.getTextContent();
 
       const pageText = textContent.items
@@ -203,13 +206,17 @@ export default function App() {
     <div
       style={{
         minHeight: "100vh",
+        width: "100vw",
         background: "#f3f3f5",
-        padding: 30,
+        padding: "24px",
+        boxSizing: "border-box",
         fontFamily: '"Aptos","Segoe UI",sans-serif',
+        overflowX: "hidden",
       }}
     >
       <div
         style={{
+          width: "100%",
           maxWidth: 1200,
           margin: "0 auto",
         }}
@@ -217,7 +224,7 @@ export default function App() {
         <h1
           style={{
             textAlign: "center",
-            fontSize: "72px",
+            fontSize: "clamp(38px, 6vw, 72px)",
             fontWeight: 200,
             marginBottom: 30,
             color: "#1d1d1f",
@@ -231,7 +238,7 @@ export default function App() {
           style={{
             background: "#ffffff",
             borderRadius: 36,
-            padding: 36,
+            padding: "clamp(18px, 4vw, 36px)",
             border: "1px solid #e3e3e3",
           }}
         >
@@ -244,9 +251,11 @@ export default function App() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 24,
+              fontSize: "clamp(18px, 3vw, 24px)",
               color: "#8d8d8d",
               fontWeight: 300,
+              textAlign: "center",
+              padding: 20,
             }}
           >
             {status}
@@ -321,7 +330,7 @@ export default function App() {
                 margin: 0,
                 whiteSpace: "pre-wrap",
                 color: "#1d1d1f",
-                fontSize: 18,
+                fontSize: "clamp(15px, 2vw, 18px)",
                 lineHeight: 2,
                 fontFamily: '"Aptos","Segoe UI",sans-serif',
               }}
