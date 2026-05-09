@@ -51,7 +51,7 @@ export default function App() {
   const buildInterval = (
     startDate?: string,
     startTime?: string,
-    endDate?: string,
+    _endDate?: string,
     endTime?: string
   ) => {
     if (!startDate || !startTime) return "";
